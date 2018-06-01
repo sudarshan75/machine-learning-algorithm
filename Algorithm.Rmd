@@ -1,0 +1,169 @@
+---
+title: "Credit_Default"
+author: "Sudarshan Mishra"
+date: "May 31, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(Metrics)
+library(rpart)
+library(tree)
+library(rattle)
+library(caret)
+library(dplyr)
+library(aod)
+library(stringr)
+library(adabag)
+library(randomForest)
+library(naivebayes)
+library(e1071)
+library(BBmisc)
+library(class)
+library(ggplot2)
+credit = read.csv("E:/Machine Learning/datasets/credit-default.csv")
+```
+
+
+```{r}
+# Exploring the Data
+summary(credit)
+glimpse(credit)
+
+# Checking for NA Values
+colSums(is.na(credit))             # No NA Values Present
+
+# Checking for Outliers in Numerical Columns
+cols <- colnames(credit)[sapply(credit,is.numeric)]
+sapply(subset(credit,select=cols),function(x){boxplot.stats(x)$out})
+# Outliers are present but these are valid scenarios, so we keep them as such
+
+# Exploring Categorical Variables
+cols_fact <- colnames(credit)[sapply(credit,is.factor)]
+sapply(subset(credit,select = cols_fact),function(x){table(x)/length(x)*100})
+```
+
+
+### Linear Regression
+```{r}
+credit_train<-credit[1:700,]
+credit_test<-credit[701:1000,]
+lm_model=lm(default~.,data = credit_train)
+lm_pred<-predict(lm_model,credit_test,type="response")
+lmpred<-ifelse(lm_pred > 1.5, 2, 1)
+lm_acc<-mean(credit_test$default==lmpred)
+```
+
+
+### Decision Tree
+```{r}
+credit$default<-as.factor(credit$default)
+credit_train<-credit[1:700,]
+credit_test<-credit[701:1000,]
+dctree<-tree(default~.,data = credit_train)
+dcpred<-predict(dctree,credit_test,type="class")
+dcon<-confusionMatrix(dcpred,credit_test$default,positive = "1")
+dcon
+```
+
+## Random Forest
+```{r}
+# Random Forest
+model_rand <- randomForest(default ~ .,data = credit_train)
+pred_rand <- predict(model_rand,credit_test)
+cm_rand <- confusionMatrix(pred_rand,credit_test$default,positive = "1")
+cm_rand
+```
+
+
+## Boosting
+```{r}
+# Boosting
+mod_boost <- boosting(default ~ .,data = credit_train)
+pred_boost <- predict(mod_boost,credit_test)
+pred_boost$class <- as.factor(pred_boost$class)
+cm_boost <- confusionMatrix(pred_boost$class,credit_test$default)
+cm_boost
+```
+
+
+# KNN Classification
+```{r}
+# KNN Algorithm
+# Data Preparation
+credit = read.csv("E:/Machine Learning/datasets/credit-default.csv")
+
+# Converting Categorical to Numerical Columns
+knn_credit <- dummyVars(~.,data = credit)
+knn_credit <- data.frame(predict(knn_credit,credit))
+
+# Normalizing the Data
+knn_credit_norm <- normalize(knn_credit,method = "range",range = c(0,1))
+
+# Splitting the Data into Test and Train Sets
+knn_train <- knn_credit_norm[sample(seq(1,nrow(knn_credit_norm)),0.7 * nrow(knn_credit_norm)),]
+knn_test <- knn_credit_norm[sample(seq(1,nrow(knn_credit_norm)),0.3 * nrow(knn_credit_norm)),]
+
+k <- round(sqrt(nrow(knn_train)))
+
+#KNN Implementation
+knn_pred <- knn(knn_train %>% select(-default),
+    knn_test %>% select(-default),
+    cl = as.factor(knn_train$default),k = k-1)
+
+knn_pred <- as.factor(knn_pred)
+knn_test$default <- as.factor(knn_test$default)
+knn_cm <- confusionMatrix(knn_pred,knn_test$default,positive = "1")
+knn_cm
+```
+
+
+# Finding Best K- Value
+```{r}
+# Finding Optimal Value of K
+kmax <- 50
+acc <- c()
+sens <- c()
+for (i in 1:kmax)
+{
+  knn_pred <- knn(knn_train %>% select(-default),
+    knn_test %>% select(-default),
+    cl = as.factor(knn_train$default),k = i)
+  knn_pred <- as.factor(knn_pred)
+  knn_test$default <- as.factor(knn_test$default)
+  knn_cm <- confusionMatrix(knn_pred,knn_test$default,positive = "1") 
+  acc <- c(acc,knn_cm$overall["Accuracy"])
+  sens <- c(sens,knn_cm$byClass["Sensitivity"])
+}
+plot(1:kmax,1-acc,type = "b")
+k = which(max(acc[-1]) == acc)
+print(k)
+knn_pred <- knn(knn_train %>% select(-default),
+    knn_test %>% select(-default),
+    cl = as.factor(knn_train$default),k = k)
+knn_pred <- as.factor(knn_pred)
+knn_test$default <- as.factor(knn_test$default)
+knn_cm <- confusionMatrix(knn_pred,knn_test$default,positive = "1")
+knn_cm
+```
+
+## Navie Bayes Classification
+```{r}
+# Navie Bayes
+nav_model <- naiveBayes(default ~ .,data = credit_train)
+nav_pred <- predict(nav_model,credit_test)
+nav_cm <- confusionMatrix(nav_pred,credit_test$default)
+nav_cm
+```
+
+
+### Accuracy of all models
+```{r}
+Accuracy <- c(dcon$overall["Accuracy"],cm_rand$overall["Accuracy"],
+              cm_boost$overall["Accuracy"],knn_cm$overall["Accuracy"],
+              nav_cm$overall["Accuracy"],lm_acc)
+
+```
+
+
