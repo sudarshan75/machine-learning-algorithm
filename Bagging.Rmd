@@ -1,0 +1,118 @@
+---
+title: "Bagging"
+author: "Sudarshan Mishra"
+date: "May 15, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+hr<-read.csv("E:/Datasets/HR Analytics.csv")
+library(rattle)
+library(dplyr)
+library(tree)
+library(caret)
+library(adabag)
+```
+
+
+####output parameters
+```{r}
+hr$Attrition=as.factor(hr$Attrition)
+hr_train<-hr[sample(seq(1,nrow(hr)),0.8*nrow(hr)),]
+hr_test<-hr[sample(seq(1,nrow(hr)),(.3*nrow(hr))),]
+model=rpart(Attrition~Gender+MonthlyIncome+OverTime,data = hr_train)
+fancyRpartPlot(model)
+predict<-predict(model,hr_test,type="class")
+hr_test$predict<-ifelse(predict$'0'>0.5,0,1)
+names(hr_test)
+View(predict(model,hr_test))
+hr[253,c("Gender","MonthlyIncome","OverTime","Attrition")]
+accuracy(hr_test$Attrition,predict)
+sum(hr_test$Attrition==predict)/length(predict)
+```
+
+
+```{r}
+table(predict,hr_test$Attrition)
+
+accuracy(hr_test$Attrition,predict)
+confusionMatrix(predict,hr_test$Attrition,positive = "1")
+####accuracy=(TP+TN)/(TP+TN+FP+FN)
+ac<-(354+1)/(20+354+66+1)
+ac
+
+####sensitivity=TP/(TP+FN)
+s=1/67
+s
+```
+
+
+
+```{r}
+hr$Attrition=as.factor(hr$Attrition)
+hr_train<-hr[sample(seq(1,nrow(hr)),0.7*nrow(hr)),]
+hr_test<-hr[sample(seq(1,nrow(hr)),(.3*nrow(hr))),]
+model=rpart(Attrition~JobRole+MonthlyIncome+OverTime,data=hr_train,control = rpart.control(cp=-1,minsplit = 2,minbucket = 1))
+#model
+#fancyRpartPlot(model)
+pred<-predict(model,hr_test)
+accuracy(hr_test$Attrition,pred)
+printcp(model)
+```
+
+
+```{r}
+mtry=round(sqrt(length(colnames(hr_train))-1))
+model_rf<-randomForest(Attrition~.,data=hr_train,ntree=400,mtry=mtry)
+pred=predict(model_rf,hr_test)
+cm<-confusionMatrix(pred,hr_test$Attrition,positive = "1")
+cm$byClass['Sensitivity']*100
+cm$overall['Accuracy']*100
+```
+```{r}
+acc<-c()
+sens<-c()
+for (i in seq(1,400)) {
+  model_rf<-randomForest(Attrition~.,data=hr_train,ntree=i,mtry=mtry)
+  pred=predict(model_rf,hr_test)
+  cm<-confusionMatrix(pred,hr_test$Attrition,positive = "1")
+  sens<-c(sens,cm$byClass['Sensitivity']*100)
+  acc<-c(acc,cm$overall['Accuracy']*100)
+}
+result=data.frame(acc=acc,sens=sens)
+max(result$acc)
+```
+
+```{r}
+input_predictors=colnames(hr_train%>%select(-Attrition))
+mtry=round(sqrt(length(input_predictors)))
+result=data.frame(actual=hr_test$Attrition)
+for (i in seq(1,400)) {
+  sample_predictor=input_predictors[sample(1:length(input_predictors),mtry)]
+  sample_index<-sample(seq(1,nrow(hr_train)),(0.6*nrow(hr_train)))
+  sample_data=hr_train[sample_index,c(sample_predictor,'Attrition')]
+  curr_model=rpart(Attrition~.,data = sample_data)
+  result[,paste0('tree_',i,collapse= "")]=predict(curr_model,hr_test%>%select(sample_predictor),type="class")
+  
+}
+
+result$count_0<-rowSums((result%>%select(-actual))==0)
+result$count_1<-rowSums((result%>%select(-actual))==1)
+
+result$final=ifelse(result$count_0>result$count_1,0,1)
+
+table(result$final)
+accuracy(hr_test$Attrition,hr_test$pred)
+```
+
+```{r}
+model_boost<-boosting(Attrition~.,data=hr_train)
+predict_oobj<-predict(model_boost,hr_test)
+hr_test$pred<-as.factor(hr_test$pred)
+hr_test$pred<-predict_oobj$class
+confusionMatrix(hr_test$pred,hr_test$Attrition,positive = '1')
+hr_test$Attrition<-as.factor(hr_test$Attrition)
+predict_oobj
+```
+
