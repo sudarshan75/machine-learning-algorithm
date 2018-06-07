@@ -1,0 +1,104 @@
+---
+title: "Reccomrndation"
+author: "Sudarshan Mishra"
+date: "May 21, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(arules)
+library(arulesViz)
+data("Groceries")
+movies<-read.csv("E:/Machine Learning/datasets/movies.csv")
+ratings<-read.csv("E:/Machine Learning/datasets/ratings.csv")
+library(knitr)
+library(reshape2)
+library(LSAfun)
+library(recommenderlab)
+library(dplyr)
+```
+
+```{r}
+Groceries
+inspect(Groceries[1])
+str(Groceries)
+class(Groceries)
+View(Groceries)
+dim(Groceries)
+```
+
+
+
+```{r}
+model=apriori(Groceries,parameter = list(support=0.01,confidence=0.2))
+inspect(sort(model,decreasing = T,by='lift')[1:10])
+
+
+
+```
+
+
+```{r}
+basket=list(c('a','b','c'),c('a','c','d'),c('e','a'),c('a','b'))
+basket_trans=as(basket,'transactions')
+basket_trans
+summary(basket_trans)
+itemFrequencyPlot(Groceries,topN=10)
+itemFrequencyPlot(basket_trans)
+```
+
+```{r}
+model=apriori(basket_trans,parameter = list(support=0,confidence=0))
+inspect(model)
+```
+
+
+```{r}
+kable(head(movies))
+kable(head(ratings))
+length(unique(ratings$movieId))
+```
+
+
+```{r}
+rating_matrix<-dcast(ratings,userId~movieId,value.var = "rating")
+cosine(na.omit(t(rating_matrix[1:2 ,])))
+rank_matrix<-as(as.matrix(rating_matrix[,-1]),'realRatingMatrix')
+model<-Recommender(rank_matrix,method="UBCF",param=list(method="Cosine",nn=10))
+result<-predict(model,rank_matrix[1,],n=10)
+movies_rec=as.numeric(as(result,'list')[[1]])
+movies%>%filter(movieId %in% movies_rec)%>%select(title)
+
+recommend_movies=function(model,userid){
+  result<-predict(model,rank_matrix[userid,],n=10)
+  movies_rec=as.numeric(as(result,'list')[[1]])
+  return_movies=movies%>%filter(movieId %in% movies_rec)%>%select(title)
+  return(return_movies)
+}
+
+recommend_movies(model,42)
+
+
+
+
+```
+
+
+```{r}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
